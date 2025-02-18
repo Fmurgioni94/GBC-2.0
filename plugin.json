@@ -1,0 +1,4 @@
+{
+    "name": "Goal Breakdown Component",
+    "description": "This plugin limits the intaraction that the user can have to the LLM, only messages regarding breaking a goal into small achivable tasks are allowed"
+}
