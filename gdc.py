@@ -210,30 +210,46 @@ def before_cat_sends_message(message: Dict[str, Any], cat) -> Dict[str, Any]:
             Return the final output strictly in the following JSON format (without any additional text):{JSON_TEMPLATE}"""
             
             further_break_down = cat.llm(prompt)
+            # Clean any markdown formatting
+            further_break_down = further_break_down.replace("```json", "").replace("```", "").strip()
             further_break_down_clean = plugin.clean_output(further_break_down)
             
             for i, subtask in enumerate(further_break_down_clean):
                 if plugin.validate_task(subtask):
                     output_dict[f"{task_id}-subtasks-{i}"] = subtask["name_of_the_task"]
             
-        prompt = prompt = f"""Given the following tasks:{output_dict}.
+        final_prompt = f"""Given the following tasks: {output_dict}.
         For each task, create a detailed task breakdown that includes:
         1. name_of_the_task: A clear, specific task name
         2. description: A detailed explanation of what needs to be done
-        3. dependencies: List the task IDs that this task depends on, separated by commas.
-        Consider:
-        - Which tasks provide necessary knowledge or skills?
-        - Which tasks create required resources or outputs?
-        - Which tasks need to be completed first?
-        - A task can depend on multiple other tasks
-        - Some tasks might be prerequisites for multiple other tasks
-        - Use [] if a task has no dependencies
+        3. dependencies: List the task IDs that must be completed before this task (use [] if none)
         4. estimation: Estimated time in hours
-            
+
+        Consider for dependencies:
+        - Which tasks must be completed first?
+        - What knowledge from previous tasks is needed?
+        - What is the logical sequence?
+
         Return the final output strictly in the following JSON format (without any additional text):{JSON_TEMPLATE_OUTPUT}"""
-        final_output = cat.llm(prompt)
-        message.text = final_output
-        log.info(f"Processed tasks: {message.text}")
+        
+        final_output = cat.llm(final_prompt)
+        
+        # Clean the output of any markdown or whitespace
+        final_output = final_output.replace("```json", "").replace("```", "").strip()
+        
+        try:
+            # Clean and validate the final output
+            final_json = json.loads(final_output)
+            if "tasks" in final_json:
+                message.text = json.dumps(final_json, indent=4)
+                log.info(f"Successfully processed tasks: {message.text}")
+            else:
+                log.error("Invalid final output format - missing tasks key")
+                return message
+        except json.JSONDecodeError as e:
+            log.error(f"Failed to parse final output: {e}\nOutput was: {final_output}")
+            return message
+            
         return message
         
     except Exception as e:
